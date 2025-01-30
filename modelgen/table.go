@@ -152,6 +152,40 @@ func (a *{{ $structName }}) EqualsModel(b model.Model) bool {
 	return a.Equals(c)
 }
 
+func (a *{{ $structName }}) Matches(b *{{ $structName }}) bool {
+	{{- range $i, $field := index . "Fields" }}
+	{{- $fieldName := FieldName $field.Column }}
+	{{- $type := "" }}
+	{{- if index $ "WithEnumTypes" }}
+	{{- $type = FieldTypeWithEnums $tableName $field.Column $field.Schema }}
+	{{- else }}
+	{{- $type = FieldType $tableName $field.Column $field.Schema }}
+	{{- end }}
+	{{- if $i }}||
+	{{ else }}return {{ end }}
+	{{- if eq (index $type 0) '*' -}}
+	(a.{{ $fieldName }} != nil && b.{{ $fieldName }} != nil && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
+	{{- else if eq (slice $type 0 2) "[]" -}}
+	(len(a.{{ $fieldName }}) != 0 && len(b.{{ $fieldName }}) != 0 && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
+	{{- else if eq (slice $type 0 3) "map" -}}
+	(len(a.{{ $fieldName }}) != 0 && len(b.{{ $fieldName }}) != 0 && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
+	{{- else if eq $type "string" -}}
+	(a.{{ $fieldName }} != "" && b.{{ $fieldName }} != "" && a.{{ $fieldName }} == b.{{ $fieldName }})
+	{{- else if eq $type "bool" -}}
+	(a.{{ $fieldName }} == b.{{ $fieldName }})
+	{{- else if or (eq $type "int") (eq $type "int64") (eq $type "float64") -}}
+	(a.{{ $fieldName }} != 0 && b.{{ $fieldName }} != 0 && a.{{ $fieldName }} == b.{{ $fieldName }})
+	{{- else }}
+	a.{{ $fieldName }} == b.{{ $fieldName }}
+	{{- end }}
+	{{- end }}
+}
+
+func (a *{{ $structName }}) MatchesModel(b model.Model) bool {
+	c := b.(*{{ $structName }})
+	return a.Matches(c)
+}
+
 var _ model.CloneableModel = &{{ $structName }}{}
 var _ model.ComparableModel = &{{ $structName }}{}
 {{- end }}
