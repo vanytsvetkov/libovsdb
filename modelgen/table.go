@@ -92,6 +92,52 @@ func equal{{ $structName }}{{ $fieldName }}(a, b {{ $type }}) bool {
 	{{- end }}
 }
 
+func match{{ $structName }}{{ $fieldName }}(a, b {{ $type }}) bool {
+	{{- if eq (index $type 0) '*' }}
+	if b == nil {
+		return true
+	}
+	if a == nil {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	return *a == *b
+	{{- else if eq (slice $type 0 2) "[]" }}
+	if b == nil {
+		return true
+	}
+	if a == nil || len(b) > len(a) {
+		return false
+	}
+	exists := make(map[{{ slice $type 2 }}]struct{})
+	for _, item := range a {
+		exists[item] = struct{}{}
+	}
+	for _, item := range b {
+		if _, ok := exists[item]; !ok {
+			return false
+		}
+	}
+	return true
+	{{- else if eq (slice $type 0 3) "map" }}
+	if b == nil {
+		return true
+	}
+	if a == nil || len(b) > len(a) {
+		return false
+	}
+	for key, bValue := range b {
+		aValue, exists := a[key]
+		if !exists || aValue != bValue {
+			return false
+		}
+	}
+	return true
+	{{- end }}
+}
+
 {{ end }}
 {{ end }}
 
@@ -161,21 +207,17 @@ func (a *{{ $structName }}) Matches(b *{{ $structName }}) bool {
 	{{- else }}
 	{{- $type = FieldType $tableName $field.Column $field.Schema }}
 	{{- end }}
-	{{- if $i }}||
+	{{- if $i }}&&
 	{{ else }}return {{ end }}
-	{{- if eq (index $type 0) '*' -}}
-	(a.{{ $fieldName }} != nil && b.{{ $fieldName }} != nil && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
-	{{- else if eq (slice $type 0 2) "[]" -}}
-	(len(a.{{ $fieldName }}) != 0 && len(b.{{ $fieldName }}) != 0 && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
-	{{- else if eq (slice $type 0 3) "map" -}}
-	(len(a.{{ $fieldName }}) != 0 && len(b.{{ $fieldName }}) != 0 && equal{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }}))
+	{{- if or (eq (index $type 0) '*') (eq (slice $type 0 2) "[]") (eq (slice $type 0 3) "map") -}}
+	match{{ $structName }}{{ $fieldName }}(a.{{ $fieldName }}, b.{{ $fieldName }})
 	{{- else if eq $type "string" -}}
-	(a.{{ $fieldName }} != "" && b.{{ $fieldName }} != "" && a.{{ $fieldName }} == b.{{ $fieldName }})
+	(b.{{ $fieldName }} == "" || a.{{ $fieldName }} == b.{{ $fieldName }})
 	{{- else if eq $type "bool" -}}
-	(a.{{ $fieldName }} == b.{{ $fieldName }})
+	a.{{ $fieldName }} == b.{{ $fieldName }}
 	{{- else if or (eq $type "int") (eq $type "int64") (eq $type "float64") -}}
-	(a.{{ $fieldName }} != 0 && b.{{ $fieldName }} != 0 && a.{{ $fieldName }} == b.{{ $fieldName }})
-	{{- else }}
+	(b.{{ $fieldName }} == 0 || a.{{ $fieldName }} == b.{{ $fieldName }})
+	{{- else -}}
 	a.{{ $fieldName }} == b.{{ $fieldName }}
 	{{- end }}
 	{{- end }}
